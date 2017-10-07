@@ -1,23 +1,23 @@
-import discord, time, asyncio
+import discord
 
 prefix = "!"
 client = discord.Client()
-flairs = [ #(role_name, twower/command name)
-    ('#TeamMeester','Meester'),
-    ('#TeamMidnight','Midnight'),
-    ('#TeamYessoan','Yessoan')
-]
+flairs = { #(role_name, twower/command name)
+    'meester': '#TeamMeester',
+    'midnight': '#TeamMidnight',
+    'yessoan': '#TeamYessoan'
+}
 
 debug = True #set false for normal use
 
-server_id = owner_id = None
+guild_id = owner_id = None
 if debug:
-    server_id = '297811083308171264'
-    owner_id = '240995021208289280'
+    guild_id = 297811083308171264
+    owner_id = 240995021208289280
 
 else:
-    server_id ='184755239952318464'
-    owner_id = '140564059417346049'
+    guild_id =184755239952318464
+    owner_id = 140564059417346049
     
 @client.event
 async def on_ready():
@@ -33,7 +33,7 @@ async def on_message(message):
     
     command = message.content.split(' ')[0][len(prefix):].lower()
     
-    htc = client.get_server(server_id)
+    htc = client.get_guild(guild_id)
     bot = htc.get_member(client.user.id)  
     owner = htc.get_member(owner_id)        
     inHTC = (htc.get_member(message.author.id) != None)
@@ -41,35 +41,36 @@ async def on_message(message):
 
     if isOwner:
         if command == "permcheck":
-            hasPerm = bot.server_permissions.manage_roles
+            hasPerm = bot.guild_permissions.manage_roles
             if not hasPerm:
                 print("**Alert:** The bot does not have permission to manage roles.")
             else:
                 print("The bot currently has permission to manage roles.")
 
         if command == "teamstats":
-            await client.request_offline_members(htc)
+            if htc.large: await client.request_offline_members(htc)
             role_counts = {}
-            for role, name in flairs:
+            for name, role in flairs.items():
                 role_counts[name] = get_role_count(role,htc)
                 
             print ("--- FLAIR STATS ---")
             for name, count in role_counts.items():
-                print('{}: {}'.format(name,count))
+                print('{}: {}'.format(name.title(),count))
 
             print ("--- END STATS ---")
 
     if (command == "help" and message.channel.name != "music" and
-      (message.channel.is_private or message.server.id == server_id)):
-        names = ['`!{}`'.format(name.lower()) for flair, name in flairs]
+      (isinstance(message.channel, discord.abc.PrivateChannel) or message.guild.id == guild_id)):
+        names = ['`!{}`'.format(name.lower()) for name in flairs.keys()]
         if len(names) > 1:
             names[-1] = 'or {}'.format(names[-1])
-        await client.send_message(message.channel,
-            'To join a team, say {}. To leave your team, say `!remove`'.format(', '.join(names)))
+        await message.channel.send(
+            'To join a team, say {}. To leave your team, say `!remove`'.format(', '.join(names))
+        )
 
     try:
         if (inHTC and not message.channel.name in ['serious','music'] and
-          (message.channel.is_private or message.server.id == server_id)):
+          (isinstance(message.channel, discord.abc.PrivateChannel) or message.guild.id == guild_id)):
             user = htc.get_member(message.author.id)
             roles = htc.roles
             teams =[]
@@ -83,46 +84,41 @@ async def on_message(message):
                 for role in teams:
                     if role in user.roles:
                         removed = True
-                        await client.remove_roles(user,role)
-                        try:
-                            user.roles.remove(role)
-                        except:
-                            pass
+                        await user.remove_roles(role)
+
                 
                 sent_message = None
-                if removed:
-                    sent_message = await client.send_message(message.channel,"You have successfully been removed from your team.")
+                if removed:  d = "You have successfully been removed from your team."
+                else: d = "You're not on a team!"
+
+                if isinstance(message.channel, discord.abc.PrivateChannel):
+                    await message.channel.send(d)
                 else:
-                    sent_message = await client.send_message(message.channel,"You're not on a team!")
-                if not message.channel.is_private:
-                    try:
-                        await client.delete_message(message)
-                    except:
-                        pass
-                    await asyncio.sleep(5)
-                    await client.delete_message(sent_message)
+                    await message.channel.send(d, delete_after=5)
+
+                    try: await message.delete()
+                    except discord.Forbidden: pass
 
             else:
-                for role_name, name in flairs:
-                    if command == name.lower():
-                        for role in teams:
-                            if role in user.roles:
-                                await client.remove_roles(user,role)
-                                try:
-                                    user.roles.remove(role)
-                                except:
-                                    pass
+                if command in flairs:
+                    for role in teams:
+                        if role in user.roles:
+                            await user.remove_roles(role)
 
-                        team = discord.utils.get(teams,name=role_name)
-                        await client.add_roles(user,team)
-                        sent_message = await client.send_message(message.channel,"You have joined {}.".format(role_name))
-                        if not message.channel.is_private:
-                            try:
-                                await client.delete_message(message)
-                            except:
-                                pass
-                            await asyncio.sleep(5)
-                            await client.delete_message(sent_message)
+
+                    team = discord.utils.get(teams,name=flairs[command])
+                    await user.add_roles(team)
+
+                    if isinstance(message.channel, discord.abc.PrivateChannel):
+                        await message.channel.send("You have joined {}.".format(team.name))
+                    else:
+                        await message.channel.send(
+                            "You have joined {}.".format(team.name),
+                            delete_after=5
+                        )
+                        try: await message.delete()
+                        except: pass
+
 
     except Exception as e:
         if debug:
@@ -130,13 +126,13 @@ async def on_message(message):
         else:
             print("[ERROR] A bot-crashing error occured somewhere in the code.")
 
-def get_role_count(role_name,server):
-    team = discord.utils.get(server.roles,name=role_name)
+def get_role_count(role_name, guild):
+    team = discord.utils.get(guild.roles,name=role_name)
     count = len(
                 list(
                     filter(
                         lambda x:team in x.roles,
-                        server.members
+                        guild.members
                     )
                 )
             )
