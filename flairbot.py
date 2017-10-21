@@ -10,14 +10,24 @@ flairs = { #(role_name, twower/command name)
 
 debug = True #set false for normal use
 
-guild_id = owner_id = None
 if debug:
     guild_id = 297811083308171264
-    owner_id = 240995021208289280
+    owner_id = [240995021208289280]
 
 else:
     guild_id =184755239952318464
-    owner_id = 140564059417346049
+    owner_id = [
+        140564059417346049,
+        149313154512322560,
+        98569889437990912,
+        154825973278310400,
+        185164223259607040,
+        127373929600778240,
+        184884413664854016,
+        164379304879194112,
+        184079890373541889,
+        110461599176724480
+    ]
     
 @client.event
 async def on_ready():
@@ -34,10 +44,9 @@ async def on_message(message):
     command = message.content.split(' ')[0][len(prefix):].lower()
     
     htc = client.get_guild(guild_id)
-    bot = htc.get_member(client.user.id)  
-    owner = htc.get_member(owner_id)        
+    bot = htc.get_member(client.user.id)
     inHTC = (htc.get_member(message.author.id) != None)
-    isOwner = (owner.id == message.author.id)
+    isOwner = message.author.id in owner_id
 
     if isOwner:
         if command == "permcheck":
@@ -49,15 +58,13 @@ async def on_message(message):
 
         if command == "teamstats":
             if htc.large: await client.request_offline_members(htc)
-            role_counts = {}
+            d = "--- FLAIR STATS ---\n"
             for name, role in flairs.items():
-                role_counts[name] = get_role_count(role,htc)
-                
-            print ("--- FLAIR STATS ---")
-            for name, count in role_counts.items():
-                print('{}: {}'.format(name.title(),count))
+                d += '**{}**: {}\n'.format(name.title(), get_role_count(role,htc))
 
-            print ("--- END STATS ---")
+            d += "--- END STATS ---"
+            print(d)
+            await message.channel.send(d)
 
     if (command == "help" and message.channel.name != "music" and
       (isinstance(message.channel, discord.abc.PrivateChannel) or message.guild.id == guild_id)):
